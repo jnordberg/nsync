@@ -1,0 +1,11 @@
+#!/usr/bin/env node
+
+var cli;
+if (process.env.NSYNC_DEV !== undefined) {
+  require('coffee-script/register');
+  cli = require('./../src/cli/');
+} else {
+  cli = require('./../lib/cli/');
+}
+
+cli(process.argv);
