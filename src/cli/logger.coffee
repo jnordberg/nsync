@@ -58,34 +58,23 @@ formatDiff = (diff) ->
 class CliStream extends stream.Duplex
   ### Bunyan object-stream formatter. ###
 
-  constructor: (debug=false, discardLevels=[]) ->
-    @discarded = discardLevels.map bunyan.resolveLevel
-    @writeRecord = @writeRecordDebug if debug
+  constructor: (debug=false) ->
+    @write = @writeDebug if debug
     super()
 
   _read: (size) ->
 
   write: (record) ->
-    # discard specific levels - https://github.com/trentm/node-bunyan/issues/130
-    if record.level in @discarded
-      return
-    @writeRecord record
-
-  writeRecord: (record) ->
     if record.diff?
       out = formatDiff record.diff
     else
       out = record.msg
-
-    console.log record
-
-    if record.level <= DEBUG
-      out = chalk.gray('debug') + ' ' + out
-
+    if record.level >= ERROR
+      out = "#{ chalk.red 'error' } #{ out }"
     @push out + '\n'
     return
 
-  writeRecordDebug: (record) ->
+  writeDebug: (record) ->
     out = levelString record.level
     out += ' ' + record.msg
 
@@ -101,10 +90,10 @@ class CliStream extends stream.Duplex
       out += "\n      #{ fname } #{ record.src.file }:#{ record.src.line }"
 
     if record.err
-
       out += '\n\n      ' + record.err.stack.replace /\n/g, '\n      '
 
     @push out + '\n\n'
+    return
 
 
 createLogger = (level, outputStream) ->
