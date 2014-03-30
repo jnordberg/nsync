@@ -246,14 +246,16 @@ main = (argv) ->
 
   ignore = if Array.isArray options.ignore then options.ignore else [options.ignore]
 
-  # parse .gitignore if found
-  ignoreFile = path.join sourceDirectory, '.gitignore'
-  if fs.existsSync ignoreFile
-    fs.readFileSync ignoreFile
-      .toString()
-      .split '\n'
-      .filter (v) -> v.length
-      .forEach (v) -> ignore.push v
+  if options.gitignore
+    ignore.push '.git'
+    # parse .gitignore if found
+    ignoreFile = path.join sourceDirectory, '.gitignore'
+    if fs.existsSync ignoreFile
+      fs.readFileSync ignoreFile
+        .toString()
+        .split '\n'
+        .filter (v) -> v.length
+        .forEach (v) -> ignore.push v
 
   source = new nsync.FsTransport {path: sourceDirectory}
   destination = new transport transportOptions
