@@ -158,6 +158,8 @@ nsync = (source, destination, options, callback) ->
         .filter (diff) -> diff.type is 'new'
         .map (diff) -> path.dirname path.join(options.destinationPath, diff.file)
         .filter (dir, idx, arr) -> arr.indexOf(dir) is idx
+      # TODO: figure out which directories can be created in parallel
+      #       and try to saturate transport concurrency
       async.forEachSeries newDirectories, (dir, callback) ->
         logger.debug "Creating directory: #{ dir }"
         if not pretend
