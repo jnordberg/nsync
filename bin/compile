@@ -1,0 +1,50 @@
+#!/usr/bin/env node
+
+try {
+  require('shelljs/global')
+}
+catch (e) {
+  console.log('Error: shelljs not found. Try running npm install.')
+  process.exit(1)
+}
+
+var cs = require('coffee-script')
+var path = require('path')
+
+console.log('Compiling CoffeeScript')
+
+rm('-R', './lib')
+var cwd = process.cwd();
+
+var files = ls('-R', './src'), file, inf, out, map, res, opt
+for (var i = 0; i < files.length; i++) {
+  file = files[i]
+  if (file == 'version.coffee') continue // written later
+  if (file.match(/\.coffee$/)) {
+  	inf = path.join('./src', file)
+  	out = path.join('./lib', file.replace(/\.coffee$/, '.js'))
+    map = out.replace(/\.js$/, '.map')
+  	console.log('  ' + inf)
+    opt = {
+      literate: false,
+      bare: true,
+      header: false,
+      sourceMap: true,
+      filename: path.resolve(cwd, inf),
+      jsPath: path.resolve(cwd, out),
+      sourceFiles: [inf],
+      generatedFile: path.basename(out),
+      sourceRoot: path.relative(file, cwd),
+    }
+    res = cs.compile(cat(inf), opt);
+    res.js += '\n//# sourceMappingURL='+path.basename(map)
+    res.js.to(out)
+    res.v3SourceMap.to(map)
+  } else {
+    mkdir('-p', './lib/' + file);
+  }
+}
+
+var version = JSON.parse(cat('package.json')).version;
+('module.exports = "' + version + '";\n').to('./lib/version.js');
+console.log('Version: '+ version);
