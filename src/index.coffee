@@ -4,8 +4,9 @@ path = require 'path'
 
 version = require './version'
 {Manifest} = require './manifest'
-{mkdirp, getStream, formatDiff} = require './utils'
+{mkdirp, getStream,} = require './utils'
 {Transport, FsTransport} = require './transport'
+
 
 defaults =
   # where to store and load manifest file on destination transport
@@ -34,10 +35,17 @@ defaults =
   # if enabled will not touch anything on the destination
   pretend: false
 
-  # logger to use, defaults to a winston instance
-  # could be any logger implementeing verbose, info, warn
-  # and error logging methods
+  # bunyan logger, defaults to a logger that logs errors to stdout
   logger: null
+
+createLogger = ->
+  bunyan = require 'bunyan'
+  logger = bunyan.createLogger
+    name: 'nsync'
+    streams: [
+      {stream: process.stderr, level: 'debug'}
+    ]
+  return logger
 
 nsync = (source, destination, options, callback) ->
   ### Synchronize *source* transport to *destination* transport using *options*.
@@ -53,28 +61,39 @@ nsync = (source, destination, options, callback) ->
   pretend = options.pretend
   manifests = null
   dircache = {}
-  logger = options.logger or require 'winston'
+  logger = options.logger ? createLogger()
   ignore = new Ignore
     twoGlobstars: true
     ignore: options.ignore
+
+  start = process.hrtime()
   stats =
     added: 0
     modified: 0
     removed: 0
     bytesTransfered: 0
 
-  logger.verbose "nsync #{ version }"
+  done = (error) ->
+    stats.time = process.hrtime start
+    if error?
+      logger.fatal error
+    else
+      logger.info {stats}, 'Done!'
+    callback error, stats
+
+  logger.debug {options}, 'Version %s', version
 
   useManifest = !!options.manifest
   if useManifest
     manifestPath = path.join options.destinationPath, options.manifest
     ignore.addPattern options.manifest
 
-  # give transports a reference to the logger
-  source.logger = destination.logger = logger
+  # give transports logger instances
+  source.logger = logger.child {transport: Transport.getName(source)}
+  destination.logger = logger.child {transport: Transport.getName(destination)}
 
   validateTransports = (callback) ->
-    logger.verbose 'validating transports'
+    logger.debug 'Validating transports'
     try
       Transport.validate source
       Transport.validate destination
@@ -82,33 +101,33 @@ nsync = (source, destination, options, callback) ->
     callback error
 
   setupTransports = (callback) ->
-    logger.verbose 'setup transports'
+    logger.debug 'Setup transports'
     async.parallel [
       (callback) -> source.setup callback
       (callback) -> destination.setup callback
     ], callback
 
   loadManifests = (callback) ->
-    logger.verbose 'loading manifests'
+    logger.debug 'Loading manifests'
     async.parallel
       source: (callback) ->
         # source manifests are always created from directory for comparison
-        logger.verbose "building source manifest from #{ options.sourcePath }"
+        logger.debug 'Building source manifest from %s', options.sourcePath
         Manifest.fromDirectory options.sourcePath, source, options.concurrency, callback
       destination: (callback) ->
         async.waterfall [
           (callback) ->
             if useManifest and not options.forceRebuild
-              logger.verbose "Loading manifest from destination"
+              logger.debug 'Loading manifest from destination'
               Manifest.fromFile manifestPath, destination, (error, manifest) ->
                 if error?
-                  logger.verbose "No manifest found, rebuilding"
+                  logger.debug "No manifest found, rebuilding"
                 callback null, manifest
             else
               callback null, null
           (manifest, callback) ->
             if not manifest?
-              logger.verbose "Building manifest from destination"
+              logger.debug "Building manifest from destination"
               Manifest.fromDirectory options.destinationPath, destination, options.concurrency, callback
             else
               callback null, manifest
@@ -118,16 +137,17 @@ nsync = (source, destination, options, callback) ->
       callback error
 
   syncFiles = (callback) ->
-    logger.verbose 'Building diff'
+    logger.debug 'Building diff'
     diffs = Manifest.diff manifests.destination, manifests.source
     test = ignore.createFilter()
+    logger.debug {patterns: ignore._patterns}, 'Filtering out ignored files'
     diffs = diffs.filter (diff) ->
       if not test diff.file
-        logger.verbose "Ignoring #{ diff.file }"
+        logger.trace "Ignoring #{ diff.file }"
         return false
       return true
 
-    logger.verbose "Diff size: #{ diffs.length }"
+    logger.debug "Diff size: #{ diffs.length }"
 
     if diffs.length is 0
       logger.info "Already syncrhonized, exiting..."
@@ -139,7 +159,7 @@ nsync = (source, destination, options, callback) ->
         .map (diff) -> path.dirname path.join(options.destinationPath, diff.file)
         .filter (dir, idx, arr) -> arr.indexOf(dir) is idx
       async.forEachSeries newDirectories, (dir, callback) ->
-        logger.verbose "creating directory: #{ dir }"
+        logger.debug "Creating directory: #{ dir }"
         if not pretend
           mkdirp destination, dir, dircache, callback
         else
@@ -156,7 +176,7 @@ nsync = (source, destination, options, callback) ->
           (callback) -> destination.listDirectory dir, callback
           (items, callback) ->
             if items.length is 0
-              logger.verbose "removing empty directory: #{ dir }"
+              logger.debug "Removing empty directory: #{ dir }"
               if not pretend
                 destination.deleteDirectory dir, callback
               else
@@ -169,10 +189,10 @@ nsync = (source, destination, options, callback) ->
     handleDiff = (diff, callback) ->
       toFile = path.join options.destinationPath, diff.file
       fromFile = path.join options.sourcePath, diff.file
-      logger.verbose "#{ fromFile } -> #{ toFile }"
+      logger.debug "#{ fromFile } -> #{ toFile }"
       switch diff.type
         when 'new', 'change'
-          logger.info formatDiff diff
+          logger.info {diff}, '%s: %s', diff.type, diff.file
           stats.added += 1 if diff.type is 'new'
           stats.modified += 1 if diff.type is 'change'
           stats.bytesTransfered += diff.size
@@ -186,7 +206,7 @@ nsync = (source, destination, options, callback) ->
         when 'delete'
           if options.destructive
             stats.removed += 1
-            logger.info formatDiff diff
+            logger.info {diff}, '%s: %s', diff.type, diff.file
             if not pretend
               destination.deleteFile toFile, callback
             else
@@ -207,7 +227,7 @@ nsync = (source, destination, options, callback) ->
   saveManifest = (callback) ->
     # write source manifest as new destination manifest
     return callback() if not useManifest
-    logger.verbose "writing manifest to destination (#{ manifestPath })"
+    logger.debug "Writing manifest to destination (#{ manifestPath })"
     if not pretend
       async.series [
         (callback) -> mkdirp destination, path.dirname(manifestPath), dircache, callback
@@ -217,7 +237,7 @@ nsync = (source, destination, options, callback) ->
       callback()
 
   cleanup = (callback) ->
-    logger.verbose 'cleanup transports'
+    logger.debug 'Cleanup transports'
     async.parallel [
       (callback) -> source.cleanup callback
       (callback) -> destination.cleanup callback
@@ -230,7 +250,7 @@ nsync = (source, destination, options, callback) ->
     syncFiles
     saveManifest
     cleanup
-  ], (error) -> callback error, stats
+  ], done
   return
 
 

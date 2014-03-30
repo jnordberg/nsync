@@ -20,8 +20,8 @@ firstDirectory = (paths) ->
       throw error if error.code isnt 'ENOENT'
   return null
 
-listModules = (directory, includeGlobal=true) ->
-  ### Return a list of available modules for a script running from *directory*.
+listModules = (cwd, includeGlobal=true) ->
+  ### Return a list of available modules for a script running from *cwd*.
       Will also include global modules if *includeGlobal* is true. ###
 
   modules = []
@@ -33,7 +33,7 @@ listModules = (directory, includeGlobal=true) ->
     modulePaths.push firstDirectory globalPaths
 
   # https://github.com/joyent/node/blob/master/lib/module.js#L202
-  localPaths = Module._nodeModulePaths directory
+  localPaths = Module._nodeModulePaths cwd
   modulePaths.push firstDirectory localPaths
 
   for dir in modulePaths

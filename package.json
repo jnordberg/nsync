@@ -1,20 +1,44 @@
 {
   "name": "nsync",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "sync your directories",
   "main": "lib/index.js",
   "author": "Johan Nordberg <code@johan-nordberg.com>",
   "license": "MIT",
+  "keywords": [
+    "files",
+    "folders",
+    "rsync",
+    "s3",
+    "scp",
+    "sftp",
+    "sync",
+    "synchronise",
+    "synchronize"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/jnordberg/nsync.git"
+  },
+  "bin": {
+    "nsync": "bin/nsync"
+  },
+  "scripts": {
+    "prepublish": "bin/compile"
+  },
   "dependencies": {
     "async": "~0.2.10",
-    "chalk": "~0.4.0",
+    "bunyan": "~0.22.1",
+    "chalk": "^0.4.0",
     "ignore": "^2.2.12",
-    "memorystream": "~0.2.0",
-    "minimist": "0.0.8",
-    "winston": "~0.7.2"
+    "memorystream": "^0.2.0",
+    "minimist": "0.0.8"
+  },
+  "optionalDependencies": {
+    "source-map-support": "^0.2.5"
   },
   "devDependencies": {
     "coffee-script": "~1.7.1",
-    "shelljs": "~0.2.6"
+    "shelljs": "^0.2.6"
   }
 }

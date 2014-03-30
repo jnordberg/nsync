@@ -55,6 +55,12 @@ Transport.validate = (transport, callback) ->
       throw new Error "TransportError - #{ transport.constructor.name } is missing method: #{ method }"
   return
 
+Transport.getName = (transport) ->
+  ### Return canonical name for *transport*. ###
+  if transport.name?
+    return transport.name
+  return transport.constructor.name.toLowerCase().replace(/transport$/, '')
+
 
 class FsTransport
   ### File system transport using node's fs module. ###
@@ -64,6 +70,7 @@ class FsTransport
       throw new Error "Missing 'path' in options"
 
   setup: (callback) ->
+    @logger.debug 'Verifying path %s', @options.path
     async.waterfall [
       (callback) => fs.realpath @options.path, callback
       (@localPath, callback) => fs.stat @localPath, callback
@@ -120,7 +127,7 @@ class FsTransport
 FsTransport.options =
   path:
     required: true
-    description: 'Filesystem path'
+    description: 'filesystem path'
 
 ### Exports ###
 

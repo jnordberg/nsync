@@ -1,47 +1,125 @@
-require 'colors'
-winston = require 'winston'
+bunyan = require 'bunyan'
+stream = require 'stream'
 util = require 'util'
+chalk = require 'chalk'
 
-class cli extends winston.Transport
-  ### Winston transport that logs info to stdout and errors stderr  ###
+{TRACE, DEBUG, INFO, WARN, ERROR, FATAL} = bunyan
 
-  name: 'cli'
+levelString = (level) ->
+  switch level
+    when TRACE
+      chalk.gray 'trace'
+    when DEBUG
+      chalk.cyan 'debug'
+    when INFO
+      chalk.green ' info'
+    when WARN
+      chalk.yellow ' warn'
+    when ERROR
+      chalk.red 'error'
+    when FATAL
+      chalk.red.inverse 'fatal'
+    else
+      'unknown'
 
-  constructor: (options) ->
-    super(options)
-    @quiet = options.quiet or false
+stripRecord = (record) ->
+  rv = {}
+  for key of record
+    continue if key in ['name', 'level', 'hostname', 'pid',
+                        'msg', 'time', 'v', 'src', 'err']
+    rv[key] = record[key]
+  return rv
 
-  log: (level, msg, meta, callback) ->
-    if level == 'error'
-      process.stderr.write "\n  error".red + " #{ msg }\n"
-      if @level == 'verbose' && meta?
-        if meta.stack?
-          stack = meta.stack.substr meta.stack.indexOf('\n') + 1
-          process.stderr.write stack + "\n\n"
-        for key, value of meta
-          if key in ['message', 'stack']
-            continue
-          pval = util.inspect(value, false, 2, true).replace(/\n/g, '\n    ')
-          process.stderr.write "    #{ key }: #{ pval }\n"
-        process.stderr.write "\n" if not meta.stack?
-      else
-        process.stderr.write "\n"
-    else if !@quiet
-      if level isnt 'info'
-        c = if level is 'warn' then 'yellow' else 'grey'
-        msg = "#{ level[c] } #{ msg }"
-      if Object.keys(meta).length > 0
-        msg += util.format ' %j', meta
-      process.stdout.write "  #{ msg }\n"
-    @emit 'logged'
-    callback null, true
+humanSize = (bytes) ->
+  ### Format *bytes* as a string a human can understand. ###
+  rv = '0 B'
+  for stuffix, num in [' B', ' kB', ' MB', ' GB', ' TB']
+    size = Math.pow 1024, num
+    if bytes >= size
+      rv = (bytes / size).toFixed(1).replace(/\.0$/, '') + stuffix
+  return rv
 
-transports = [
-  new cli {level: 'info'}
-]
+formatDiff = (diff) ->
+  ### Format *diff* with pretty colors. ###
+  rv = null
+  marker = '●'
+  switch diff.type
+    when 'new'
+      rv = "#{ chalk.green marker } #{ diff.file } #{ chalk.gray humanSize diff.size }"
+    when 'change'
+      rv = "#{ chalk.yellow marker } #{ diff.file } "
+      delta = diff.size - diff.oldSize
+      sign = if delta > 0 then '+' else '-'
+      rv += chalk.gray sign + humanSize Math.abs delta
+    when 'delete'
+      rv = "#{ chalk.red marker } #{ diff.file }"
+  return rv
 
-logger = new winston.Logger
-  exitOnError: true
-  transports: transports
+class CliStream extends stream.Duplex
+  ### Bunyan object-stream formatter. ###
 
-module.exports = {logger, transports}
+  constructor: (debug=false, discardLevels=[]) ->
+    @discarded = discardLevels.map bunyan.resolveLevel
+    @writeRecord = @writeRecordDebug if debug
+    super()
+
+  _read: (size) ->
+
+  write: (record) ->
+    # discard specific levels - https://github.com/trentm/node-bunyan/issues/130
+    if record.level in @discarded
+      return
+    @writeRecord record
+
+  writeRecord: (record) ->
+    if record.diff?
+      out = formatDiff record.diff
+    else
+      out = record.msg
+
+    console.log record
+
+    if record.level <= DEBUG
+      out = chalk.gray('debug') + ' ' + out
+
+    @push out + '\n'
+    return
+
+  writeRecordDebug: (record) ->
+    out = levelString record.level
+    out += ' ' + record.msg
+
+    metadata = stripRecord record
+    if Object.keys(metadata).length > 0
+      out += '\n      ' + util
+        .inspect metadata, {colors: true}
+        .replace /\n/g, ' '
+        .replace /\s\s+/g, ' '
+
+    if record.src
+      fname = record.src.func ? '(anonymous)'
+      out += "\n      #{ fname } #{ record.src.file }:#{ record.src.line }"
+
+    if record.err
+
+      out += '\n\n      ' + record.err.stack.replace /\n/g, '\n      '
+
+    @push out + '\n\n'
+
+
+createLogger = (level, outputStream) ->
+  ### Create a bunyan logger using a CliStream using
+      *level* and piped to *outputStream*. ###
+  rawStream = new CliStream
+  rawStream.pipe outputStream
+  logger = bunyan.createLogger
+    name: 'nsync'
+    streams: [
+      level: level
+      type: 'raw'
+      stream: rawStream
+    ]
+  return logger
+
+
+module.exports = {CliStream, createLogger}

@@ -1,5 +1,4 @@
 async = require 'async'
-chalk = require 'chalk'
 fs = require 'fs'
 MemoryStream = require 'memorystream'
 path = require 'path'
@@ -10,31 +9,6 @@ noop = ->
 isDirectory = (filename) ->
   ### Test if *filename* is a directory. ###
   (filename[-1..] is '/')
-
-humanSize = (bytes) ->
-  ### Format *bytes* as a string a human can understand. ###
-  rv = '0 B'
-  for stuffix, num in [' B', ' kB', ' MB', ' GB', ' TB']
-    size = Math.pow 1024, num
-    if bytes >= size
-      rv = (bytes / size).toFixed(1).replace(/\.0$/, '') + stuffix
-  return rv
-
-formatDiff = (diff) ->
-  ### Format *diff* with pretty colors. ###
-  rv = null
-  marker = '●'
-  switch diff.type
-    when 'new'
-      rv = "#{ chalk.green marker } #{ diff.file } #{ chalk.gray humanSize diff.size }"
-    when 'change'
-      rv = "#{ chalk.yellow marker } #{ diff.file } "
-      delta = diff.size - diff.oldSize
-      sign = if delta > 0 then '+' else '-'
-      rv += chalk.gray sign + humanSize Math.abs delta
-    when 'delete'
-      rv = "#{ chalk.red marker } #{ diff.file }"
-  return rv
 
 waterfall = (chain, callback) ->
   ### Async waterfall that can finish on the same tick. ###
@@ -272,7 +246,7 @@ writeJSONSync = (filename, object) ->
 ### Exports ###
 
 module.exports = {
-  cp, extend, fetchFile, formatDiff, getStream, humanSize
+  cp, extend, fetchFile, getStream
   lsr, mkdirp, parseJSON, readJSON, readJSONSync, readStream
   stringifyJSON, waterfall, workerQueue, writeJSONSync
 }

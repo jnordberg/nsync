@@ -6,8 +6,9 @@ listModules = require './list'
 minimist = require 'minimist'
 nsync = require './../'
 path = require 'path'
-{logger} = require './logger'
-{readJSONSync, writeJSONSync, humanSize} = require './../utils'
+{CliStream} = require './logger'
+bunyan = require 'bunyan'
+{readJSONSync, writeJSONSync} = require './../utils'
 
 defaults =
   destination: './'
@@ -35,12 +36,15 @@ optionsUsage = """
     -X, --destructive           delete files and directories on destination
     -p, --pretend               don't actually do anything
     -S, --save [filename]       save current options to config file
-    -v, --verbose               show debug information
     -q, --quiet                 only output critical errors
     -V, --version               output version and exit
+        --debug                 show debug information
+        --json                  output json log stream
     -h, --help                  show usage
 
 """
+
+noop = ->
 
 isTransport = (name) ->
   /^nsync\-/.test name
@@ -110,7 +114,27 @@ transportUsage = (transport) ->
 
   return rv
 
-main = (argv, callback) ->
+createLogger = (options, output=process.stdout) ->
+  type = 'stream'
+  level = 'error'
+  stream = output
+
+  if not options.json
+    type = 'raw'
+    stream = new CliStream options.debug
+    stream.pipe output
+
+  if not options.quiet
+    level = if options.debug then 'trace' else 'info'
+
+  logger = bunyan.createLogger
+    name: 'nsync'
+    src: options.debug
+    streams: [{level, type, stream}]
+
+  return logger
+
+main = (argv, callback=noop) ->
 
   nversion = process.version.substr(1).split('.').map (item) -> parseInt item
   if nversion[0] is 0 and nversion[1] < 10
@@ -125,25 +149,24 @@ main = (argv, callback) ->
       destructive: 'X'
       force: 'f'
       help: 'h'
+      ignore: 'i'
       manifest: 'm'
       quiet: 'q'
       save: 'S'
-      verbose: 'v'
       version: 'V'
-      ignore: 'i'
     boolean: [
-      'destructive', 'force', 'help', 'pretend'
-      'quiet', 'verbose', 'version', 'gitignore'
+      'debug', 'destructive', 'force', 'gitignore'
+      'help', 'pretend', 'quiet', 'version'
     ]
 
-  if argv.verbose
-    if '-vv' in process.argv
-      logger.transports.cli.level = 'silly'
-    else
-      logger.transports.cli.level = 'verbose'
+  logger = createLogger argv
 
-  if argv.quiet
-    logger.transports.cli.quiet = true
+  if argv.debug
+    try
+      smc = require 'source-map-support'
+      smc.install()
+    catch error
+      logger.warn error, 'npm install source-map-support to get correct line numbers'
 
   transportName = argv._[0]
   sourceDirectory = argv._[1]
@@ -174,7 +197,7 @@ main = (argv, callback) ->
     if error.code is 'MODULE_NOT_FOUND'
       logger.error "Transport #{ transportName } not found!"
     else
-      logger.error "Transport #{ transportName }: #{ error.message }", error
+      logger.error {error}, "Could not load transport '#{ transportName }'"
     process.exit 1
 
   if not sourceDirectory? or argv.help
@@ -191,7 +214,7 @@ main = (argv, callback) ->
     try
       config = readJSONSync configPath
     catch error
-      logger.error "Failed loading config file: #{ configPath }", error
+      logger.error {error}, "Failed loading config file: #{ configPath }"
       process.exit 1
   else
     config = {}
@@ -200,7 +223,7 @@ main = (argv, callback) ->
       process.exit 1
 
   options = resolveOptions argv, config, defaults
-  logger.verbose 'options', options
+  logger.debug {options}, 'resolved options'
 
   transportDefaults = {}
   for key, opt of transport.options
@@ -208,7 +231,7 @@ main = (argv, callback) ->
 
   transportConfig = config[normalizeTransportName(transportName)] or {}
   transportOptions = resolveOptions argv, transportConfig, transportDefaults
-  logger.verbose 'transport options', transportOptions
+  logger.debug {options: transportOptions}, 'transport options'
 
   for key of transportOptions
     if not transportOptions[key]? and transport.options[key].required
@@ -239,20 +262,9 @@ main = (argv, callback) ->
     forceRebuild: options.force
     ignore: ignore
 
-  logger.info ''
-  logger.info "Synchronizing #{ sourceDirectory.bold } using transport #{ transportName.bold }\n"
+  logger.info "Synchronizing %s using transport %s", sourceDirectory, transportName
 
-  start = process.hrtime()
-  nsync source, destination, nsyncOpts, (error, stats) ->
-    if error?
-      logger.error error.message, error if error?
-    else
-      delta = process.hrtime start
-      deltaS = (delta[0] + (delta[1] / 1e9)).toFixed(2).replace(/\.00/, '')
-      logger.info ''
-      logger.info "Done! Transfered #{ chalk.bold humanSize stats.bytesTransfered } in #{ chalk.bold deltaS + 's' }"
-      logger.info ''
-    callback? error, stats
+  nsync source, destination, nsyncOpts, callback
 
 
 module.exports = main
