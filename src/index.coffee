@@ -218,10 +218,18 @@ nsync = (source, destination, options, callback) ->
         else
           callback new Error "Unknown diff type: #{ diff.type }"
 
+    preserveDeletions = (callback) ->
+      # called when not in destructive mode to keep the deleted files in the
+      # destination transport (adds to source manif since it will be written later)
+      for diff in diffs when diff.type is 'delete'
+        manifests.source.files[diff.file] = [diff.oldSize, diff.oldHash]
+      callback()
+
     flow = []
     flow.push makeDirectores
     flow.push (callback) -> async.forEachLimit diffs, options.concurrency, handleDiff, callback
     flow.push removeEmpty if options.destructive
+    flow.push preserveDeletions if not options.destructive
 
     async.series flow, callback
     return

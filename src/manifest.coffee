@@ -84,13 +84,31 @@ Manifest.diff = (oldManifest, newManifest) ->
     oldInfo = oldManifest.files[filename]
     if oldInfo?
       if oldInfo[1] isnt newInfo[1]
-        diff.push {type: 'change', file: filename, size: newInfo[0], oldSize: oldInfo[0]}
+        diff.push
+          type: 'change'
+          file: filename
+          hash: newInfo[1]
+          oldHash: oldInfo[1]
+          size: newInfo[0]
+          oldSize: oldInfo[0]
     else
-      diff.push {type: 'new', file: filename, size: newInfo[0], oldSize: 0}
+      diff.push
+        type: 'new'
+        file: filename
+        hash: newInfo[1]
+        oldHash: null
+        size: newInfo[0]
+        oldSize: 0
   for filename, oldInfo of oldManifest.files
     newInfo = newManifest.files[filename]
     if not newInfo?
-      diff.push {type: 'delete', file: filename, size: 0, oldSize: oldInfo[0]}
+      diff.push
+        type: 'delete'
+        file: filename
+        hash: null
+        oldHash: oldInfo[1]
+        size: 0
+        oldSize: oldInfo[0]
   return diff
 
 # Exports
