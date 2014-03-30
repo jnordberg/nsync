@@ -44,8 +44,6 @@ optionsUsage = """
 
 """
 
-noop = ->
-
 isTransport = (name) ->
   /^nsync\-/.test name
 
@@ -134,12 +132,16 @@ createLogger = (options, output=process.stdout) ->
 
   return logger
 
-main = (argv, callback=noop) ->
+main = (argv) ->
 
   nversion = process.version.substr(1).split('.').map (item) -> parseInt item
   if nversion[0] is 0 and nversion[1] < 10
     process.stderr.write "nsync requires node >=0.10 (you have: #{ nversion.join '.' })\n"
     process.exit 1
+
+  exit = (code) ->
+    # give the log streams a chance to flush before exiting
+    setImmediate -> process.exit code
 
   argv = minimist argv.slice(2),
     alias:
@@ -171,22 +173,21 @@ main = (argv, callback=noop) ->
   transportName = argv._[0]
   sourceDirectory = argv._[1]
 
-  if not transportName?
+  if not transportName? or (not transportName? and argv.help)
     availableTransports = listModules process.cwd()
       .filter isTransport
       .map normalizeTransportName
-    availableTransports.push 'fs'
+      .map (name) -> chalk.bold name
+      .join ' '
 
-    process.stderr.write """
-      #{ usage }
-
-      available transports: #{ availableTransports.map (name) -> chalk.bold name  }
-
-      #{ optionsUsage }
-
+    out = if argv.help then process.stdout else process.stderr
+    out.write """
+      #{ usage }\n
+      available transports: #{ chalk.bold 'fs' } #{ availableTransports  }\n
+      #{ optionsUsage }\n
     """
-
-    process.exit 1
+    exit if argv.help then 0 else 1
+    return
 
   try
     if transportName is 'fs'
@@ -197,8 +198,9 @@ main = (argv, callback=noop) ->
     if error.code is 'MODULE_NOT_FOUND'
       logger.error "Transport #{ transportName } not found!"
     else
-      logger.error {error}, "Could not load transport '#{ transportName }'"
-    process.exit 1
+      logger.error error, "Could not load transport '#{ transportName }'"
+    exit 1
+    return
 
   if not sourceDirectory? or argv.help
     out = if argv.help then process.stdout else process.stderr
@@ -207,20 +209,23 @@ main = (argv, callback=noop) ->
       #{ transportUsage(transport) }
       #{ optionsUsage }\n
     """
-    process.exit if argv.help then 0 else 1
+    exit if argv.help then 0 else 1
+    return
 
   configPath = argv.config or './nsync.json'
   if fs.existsSync configPath
     try
       config = readJSONSync configPath
     catch error
-      logger.error {error}, "Failed loading config file: #{ configPath }"
-      process.exit 1
+      logger.error error, "Failed loading config file: #{ configPath }"
+      exit 1
+      return
   else
     config = {}
     if argv.config?
       logger.error "Could not find config file: #{ configPath }"
-      process.exit 1
+      exit 1
+      return
 
   options = resolveOptions argv, config, defaults
   logger.debug {options}, 'resolved options'
@@ -236,7 +241,8 @@ main = (argv, callback=noop) ->
   for key of transportOptions
     if not transportOptions[key]? and transport.options[key].required
       logger.error "Transport #{ transportName } requires option '#{ key }' to be set"
-      process.exit 1
+      exit 1
+      return
 
   ignore = if Array.isArray options.ignore then options.ignore else [options.ignore]
 
@@ -264,7 +270,7 @@ main = (argv, callback=noop) ->
 
   logger.info "Synchronizing %s using transport %s", sourceDirectory, transportName
 
-  nsync source, destination, nsyncOpts, callback
-
+  nsync source, destination, nsyncOpts, (error) ->
+    exit if error? then 1 else 0
 
 module.exports = main
