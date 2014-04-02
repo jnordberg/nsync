@@ -1,6 +1,6 @@
 
-nsync
-=====
+![nsync](http://jnordberg.github.io/nsync/nsync.svg)
+====================================================
 
 nsync is a commandline tool and node.js library that synchronises folders
 using pluggable transports.
