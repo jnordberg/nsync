@@ -2,7 +2,7 @@
   "name": "nsync",
   "version": "0.0.3",
   "description": "sync your directories",
-  "main": "lib/index.js",
+  "main": "lib",
   "author": "Johan Nordberg <code@johan-nordberg.com>",
   "license": "MIT",
   "keywords": [
@@ -22,9 +22,6 @@
   },
   "bin": {
     "nsync": "bin/nsync"
-  },
-  "scripts": {
-    "prepublish": "bin/compile"
   },
   "dependencies": {
     "async": "~0.2.10",
