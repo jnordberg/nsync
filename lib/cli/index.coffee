@@ -133,12 +133,6 @@ createLogger = (options, output=process.stdout) ->
   return logger
 
 main = (argv) ->
-
-  nversion = process.version.substr(1).split('.').map (item) -> parseInt item
-  if nversion[0] is 0 and nversion[1] < 10
-    process.stderr.write "nsync requires node >=0.10 (you have: #{ nversion.join '.' })\n"
-    process.exit 1
-
   exit = (code) ->
     # give the log streams a chance to flush before exiting
     setImmediate -> process.exit code
