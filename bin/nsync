@@ -1,11 +1,8 @@
 #!/usr/bin/env node
-
-var cli;
-if (process.env.NSYNC_DEV === '1') {
+try {
   require('coffee-script/register');
-  cli = require('./../src/cli/');
-} else {
-  cli = require('./../lib/cli/');
-}
+  // in production, this will fail if coffeescript isn't installed, but the
+  // coffee is compiled anyway, so it doesn't matter
+} catch(e){}
 
-cli(process.argv);
+require('../lib/cli/')();

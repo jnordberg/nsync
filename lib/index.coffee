@@ -2,7 +2,6 @@ async = require 'async'
 {Ignore} = require 'ignore'
 path = require 'path'
 
-version = require './version'
 {Manifest} = require './manifest'
 {mkdirp, getStream,} = require './utils'
 {Transport, FsTransport} = require './transport'
@@ -220,7 +219,8 @@ nsync = (source, destination, options, callback) ->
 
     preserveDeletions = (callback) ->
       # called when not in destructive mode to keep the deleted files in the
-      # destination transport (adds to source manif since it will be written later)
+      # destination transport (adds to source manif since it will be written
+      # later)
       for diff in diffs when diff.type is 'delete'
         manifests.source.files[diff.file] = [diff.oldSize, diff.oldHash]
       callback()
@@ -268,7 +268,6 @@ nsync = (source, destination, options, callback) ->
 
 module.exports = nsync
 module.exports.defaults = defaults
-module.exports.version = version
 module.exports.Manifest = Manifest
 module.exports.Transport = Transport
 module.exports.FsTransport = FsTransport
